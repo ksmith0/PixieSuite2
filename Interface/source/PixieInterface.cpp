@@ -16,6 +16,10 @@
 using namespace std;
 using namespace Display;
 
+//A variable defined by the pxi library containing the path to the crate configuration.
+extern const char* PCISysIniFile;
+
+
 set<string> PixieInterface::validConfigKeys;
 
 // some simple histogram functions
@@ -94,31 +98,35 @@ bool PixieInterface::Histogram::Write(ofstream &out)
 
 PixieInterface::PixieInterface(const char *fn) : hasAlternativeConfig(false), lock("PixieInterface")
 {
-  SetColorTerm();
-  // Set-up valid configuration keys if they don't exist yet
-  if (validConfigKeys.empty()) { 
-    //? perhaps these should allow more than just one alternate firmware configuration 
-    validConfigKeys.insert("AltComFpgaFile");
-    validConfigKeys.insert("AltDspConfFile");
-    validConfigKeys.insert("AltDspVarFile");
-    validConfigKeys.insert("AltSpFpgaFile");
-    validConfigKeys.insert("AltTrigFpgaFile");
-    // standard files
-    validConfigKeys.insert("ComFpgaFile");
-    validConfigKeys.insert("DspConfFile");
-    validConfigKeys.insert("DspVarFile");
-    validConfigKeys.insert("DspSetFile");
-    validConfigKeys.insert("DspWorkingSetFile");
-    validConfigKeys.insert("ListModeFile");
-    validConfigKeys.insert("PixieBaseDir");
-    validConfigKeys.insert("SlotFile");
-    validConfigKeys.insert("SpFpgaFile");
-    validConfigKeys.insert("TrigFpgaFile");
-  }
-  if (!ReadConfigurationFile(fn)) {
-    cout << ErrorStr("Error reading configuration file") << endl;
-    exit(EXIT_FAILURE);
-  }
+	SetColorTerm();
+	// Set-up valid configuration keys if they don't exist yet
+	if (validConfigKeys.empty()) { 
+		//? perhaps these should allow more than just one alternate firmware configuration 
+		validConfigKeys.insert("AltComFpgaFile");
+		validConfigKeys.insert("AltDspConfFile");
+		validConfigKeys.insert("AltDspVarFile");
+		validConfigKeys.insert("AltSpFpgaFile");
+		validConfigKeys.insert("AltTrigFpgaFile");
+		// standard files
+		validConfigKeys.insert("ComFpgaFile");
+		validConfigKeys.insert("DspConfFile");
+		validConfigKeys.insert("DspVarFile");
+		validConfigKeys.insert("DspSetFile");
+		validConfigKeys.insert("DspWorkingSetFile");
+		validConfigKeys.insert("ListModeFile");
+		validConfigKeys.insert("PixieBaseDir");
+		validConfigKeys.insert("SlotFile");
+		validConfigKeys.insert("SpFpgaFile");
+		validConfigKeys.insert("TrigFpgaFile");
+		validConfigKeys.insert("CrateConfig");
+	}
+	if (!ReadConfigurationFile(fn)) {
+		std::cout << Display::ErrorStr() << " Unable to read configuration file: '" << fn << "\n";
+		std::cout << Display::InfoStr() << " Did you forget to copy default configuration files from '" << INSTALL_PREFIX << "/share/config' to the running directory?\n";
+		exit(EXIT_FAILURE);
+	}
+	//Overwrite the default path 'pxisys.ini' with the one specified in the config file.
+	PCISysIniFile = configStrings["CrateConfig"].c_str();
 
 }
 
@@ -248,76 +256,81 @@ bool PixieInterface::Init(bool offlineMode)
 
 bool PixieInterface::Boot(int mode, bool useWorkingSetFile) 
 {
-  string &setFile = useWorkingSetFile ? 
-    configStrings["DspWorkingSetFile"] : configStrings["DspSetFile"];
+	string &setFile = useWorkingSetFile ? 
+		configStrings["DspWorkingSetFile"] : configStrings["DspSetFile"];
 
-  LeaderPrint("Booting Pixie");
+	LeaderPrint("Booting Pixie");
 
- bool goodBoot = true;
+	//Break the leader print for the Boot status.
+	if (mode == BootAll) std::cout << std::endl;
 
-  if (hasAlternativeConfig) {
-    // must proceed through boot module by module
-    cout << InfoStr("[MULTICONFIG]");
-    for (int i=0; i < numberCards; i++) {
-      if (firmwareConfig[i] == 1) {
-	// use the Alt... files
-	retval = Pixie16BootModule(&configStrings["AltComFpgaFile"][0],
-				   &configStrings["AltSpFpgaFile"][0],
-				   &configStrings["AltTrigFpgaFile"][0],
-				   &configStrings["AltDspConfFile"][0],
-				   &setFile[0],
-				   &configStrings["AltDspVarFile"][0],
-				   i, mode);
-      } else {
-	// use the standard files
-	retval = Pixie16BootModule(&configStrings["ComFpgaFile"][0], 
-				   &configStrings["SpFpgaFile"][0], 
-				   &configStrings["TrigFpgaFile"][0],
-				   &configStrings["DspConfFile"][0], 
-				   &setFile[0],
-				   &configStrings["DspVarFile"][0],
-				   i, mode);
-      }
-      goodBoot = (goodBoot && !CheckError(true));
-    }
-  } else {
-    // boot all at once
-    retval = Pixie16BootModule(&configStrings["ComFpgaFile"][0], 
-			       &configStrings["SpFpgaFile"][0], 
-			       &configStrings["TrigFpgaFile"][0],
-			       &configStrings["DspConfFile"][0], 
-			       &setFile[0],
-			       &configStrings["DspVarFile"][0],
-			       numberCards, mode);
-    goodBoot = !CheckError(true);
-  }
- 
-  cout << "  Used set file: " << InfoStr(setFile) << endl;
+	bool goodBoot = true;
 
-  LeaderPrint("Checking SlotIDs");
+	if (hasAlternativeConfig) {
+		// must proceed through boot module by module
+		cout << InfoStr("[MULTICONFIG]") << "\n";
+		for (int i=0; i < numberCards; i++) {
+			if (firmwareConfig[i] == 1) {
+				// use the Alt... files
+				retval = Pixie16BootModule(&configStrings["AltComFpgaFile"][0],
+						&configStrings["AltSpFpgaFile"][0],
+						&configStrings["AltTrigFpgaFile"][0],
+						&configStrings["AltDspConfFile"][0],
+						&setFile[0],
+						&configStrings["AltDspVarFile"][0],
+						i, mode);
+			} else {
+				// use the standard files
+				retval = Pixie16BootModule(&configStrings["ComFpgaFile"][0], 
+						&configStrings["SpFpgaFile"][0], 
+						&configStrings["TrigFpgaFile"][0],
+						&configStrings["DspConfFile"][0], 
+						&setFile[0],
+						&configStrings["DspVarFile"][0],
+						i, mode);
+			}
+			LeaderPrint("Booting Pixie Module ");
+			goodBoot = (goodBoot && !CheckError(true));
+		}
+	} else {
+		// boot all at once
+		retval = Pixie16BootModule(&configStrings["ComFpgaFile"][0], 
+				&configStrings["SpFpgaFile"][0], 
+				&configStrings["TrigFpgaFile"][0],
+				&configStrings["DspConfFile"][0], 
+				&setFile[0],
+				&configStrings["DspVarFile"][0],
+				numberCards, mode);
+		if (mode == BootAll) LeaderPrint("Booting Pixie");
+		goodBoot = !CheckError(true);
+	}
 
-  bool hadError = false;
-  bool updated = false;
+	cout << "  Used set file: " << InfoStr(setFile) << endl;
 
-  word_t val;
+	LeaderPrint("Checking SlotIDs");
 
-  for (int i=0; i < numberCards; i++) {
-    if (!ReadSglModPar("SlotID", &val, i))
-      hadError = true;
-    if (val != slotMap[i]) {
-      updated = true;
-      if (!WriteSglModPar("SlotID", slotMap[i], i))
-	hadError = true;
-    }
-  }
-  if (hadError) 
-    cout << ErrorStr() << endl;
-  else if (updated)
-    cout << WarningStr("[UPDATED]") << endl;
-  else
-    cout << OkayStr() << endl;
+	bool hadError = false;
+	bool updated = false;
 
-  return goodBoot && !hadError;
+	word_t val;
+
+	for (int i=0; i < numberCards; i++) {
+		if (!ReadSglModPar("SlotID", &val, i))
+			hadError = true;
+		if (val != slotMap[i]) {
+			updated = true;
+			if (!WriteSglModPar("SlotID", slotMap[i], i))
+				hadError = true;
+		}
+	}
+	if (hadError) 
+		cout << ErrorStr() << endl;
+	else if (updated)
+		cout << WarningStr("[UPDATED]") << endl;
+	else
+		cout << OkayStr() << endl;
+
+	return goodBoot && !hadError;
 }
 
 bool PixieInterface::WriteSglModPar(const char *name, unsigned int val, int mod)

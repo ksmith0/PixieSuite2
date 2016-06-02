@@ -5,11 +5,11 @@
   * Library to facilitate the creation of C++ executables with
   * interactive command line interfaces under a linux environment
   *
-  * \author Cory R. Thornsberry
+  * \author Cory R. Thornsberry and Karl Smith
   * 
   * \date Oct. 1st, 2015
   * 
-  * \version 1.2.02
+  * \version 1.2.03
 */
 
 #ifndef CTERMINAL_H
@@ -19,12 +19,14 @@
 #include <sstream>
 #include <map>
 #include <fstream>
+#include <vector>
+#include <deque>
 
 ///Default size of terminal scroll back buffer in lines.
 #define SCROLLBACK_SIZE 1000
 
-#define CTERMINAL_VERSION "1.2.02"
-#define CTERMINAL_DATE "Oct. 2nd, 2015"
+#define CTERMINAL_VERSION "1.2.05"
+#define CTERMINAL_DATE "Mar. 2nd, 2016"
 
 #include <curses.h>
 
@@ -198,7 +200,7 @@ class Terminal{
 	std::map< std::string, int > attrMap;
 	std::streambuf *pbuf, *original;
 	std::stringstream stream;
-	std::string cmd_filename;
+	std::string historyFilename_;
 	WINDOW *main;
 	WINDOW *output_window;
 	WINDOW *input_window;
@@ -206,13 +208,12 @@ class Terminal{
 	CommandHolder commands;
 	CommandString cmd;
 	bool init;
-	bool save_cmds;
-	int text_length;
 	int cursX, cursY;
 	int offset;
 	int _winSizeX,_winSizeY;
 	int _statusWindowSize;
 	std::vector<std::string> statusStr;
+	std::deque<std::string> cmd_queue; /// The queue of commands read from a command script.
 	///The prompt string.
 	std::string prompt;
 	///The tab complete flag
@@ -253,11 +254,14 @@ class Terminal{
 	/// Initialize terminal colors
 	void init_colors_();
 	
+	/// Read commands from a command script.
+	bool LoadCommandFile(const char *filename_);
+	
 	/// Load a list of previous commands from a file
-	bool load_commands_();
+	bool LoadCommandHistory(bool overwrite);
 	
 	/// Save previous commands to a file
-	bool save_commands_();
+	bool SaveCommandHistory();
 
 	/// Force a character string to the output screen
 	void print(WINDOW *window, std::string input_);
@@ -270,30 +274,31 @@ class Terminal{
 	/// Initialize the terminal interface
 	void Initialize();
 	
-	/// Initialize the terminal interface with a list of previous commands
-	void Initialize(std::string cmd_fname_);
-
-	bool SetLogFile(const char *logFileName);
+	///Specify the log file to append.
+	bool SetLogFile(std::string logFileName);
 
 	/// Initalizes a status window under the input temrinal.
 	void AddStatusWindow(unsigned short numLines = 1);
+	
 	///Set the status message.
 	void SetStatus(std::string status, unsigned short line = 0);
+	
 	///Clear the status line.
 	void ClearStatus(unsigned short line = 0);
+	
 	///Append some text to the status line.
 	void AppendStatus(std::string status, unsigned short line = 0);
 		
 	///Enable tab auto complete functionlity.
 	void EnableTabComplete(bool enable = true);
+	
 	void TabComplete(std::vector<std::string> matches);
 
 	///Enable a timeout while waiting fro a command.
 	void EnableTimeout(float timeout = 0.5);
 
-	/** Set the command filename for storing previous commands This command will 
-	  * clear all current commands from the history if overwrite_ is set to true. */
-	void SetCommandFilename(std::string input_, bool overwrite_=false);
+	/// Set the command filename for storing previous commands
+	void SetCommandHistory(std::string filename, bool overwrite=false);
 		
 	/// Set the command prompt
 	void SetPrompt(const char *input_);
@@ -308,7 +313,7 @@ class Terminal{
 	void flush();
 
 	/// Wait for the user to input a command
-	std::string GetCommand();
+	std::string GetCommand(const int &prev_cmd_return_=0);
 	
 	/// Close the window and restore control to the terminal
 	void Close();
